@@ -16,36 +16,42 @@ def download_video():
     if not video_url:
         return "אנא הכנס קישור תקין", 400
 
-    # יצירת שם קובץ זמני ייחודי למניעת התנגשויות בין משתמשים
     unique_id = str(uuid.uuid4())
     temp_filename = f"video_{unique_id}"
     
+    # --- השינוי הגדול כאן ---
     ydl_opts = {
-        'format': 'best', # איכות מיטבית (לרוב MP4 עם סאונד)
-        'outtmpl': f"{temp_filename}.%(ext)s", # שמירה זמנית
+        'format': 'best',
+        'outtmpl': f"{temp_filename}.%(ext)s",
         'noplaylist': True,
-        'quiet': True 
+        'quiet': True,
+        # ביטול בדיקת תעודות אבטחה (לפעמים עוזר לעקוף חסימות)
+        'nocheckcertificate': True,
+        # זיוף דפדפן: אנחנו אומרים ליוטיוב שאנחנו כרום רגיל בווינדוס 10
+        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        # מנסה לדמות בקשה שמגיעה מלקוחות ניידים כדי להימנע מדרישת התחברות
+        'extractor_args': {
+            'youtube': {
+                'player_client': ['android', 'web'],
+                'skip': ['dash', 'hls']
+            }
+        }
     }
+    # -----------------------
 
     try:
         final_filename = None
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            # שלב א: משיכת מידע והורדה לשרת של רנדר
             info_dict = ydl.extract_info(video_url, download=True)
-            # קבלת שם הקובץ האמיתי שנוצר (עם הסיומת הנכונה, למשל .mp4)
             final_filename = ydl.prepare_filename(info_dict)
 
-        # פונקציה למחיקת הקובץ מיד לאחר שהדפדפן מסיים להוריד אותו
         def generate_file():
             with open(final_filename, 'rb') as f:
                 yield from f
-            # מחיקת הקובץ מהשרת
             os.remove(final_filename)
 
-        # כותרת ההורדה בדפדפן (שם הקובץ המקורי של הסרטון)
         download_name = f"{info_dict.get('title', 'video')}.{info_dict.get('ext', 'mp4')}"
 
-        # שליחת הקובץ בחזרה למשתמש
         from flask import Response
         return Response(
             generate_file(),
@@ -54,11 +60,10 @@ def download_video():
         )
 
     except Exception as e:
-        # ניקוי במקרה של שגיאה (אם הקובץ נוצר)
         if final_filename and os.path.exists(final_filename):
             os.remove(final_filename)
-        return f"<h1>שגיאה בהורדה</h1><p>{str(e)}</p><br><a href='/'>נסה שוב</a>"
+        # מדפיס שגיאה ברורה יותר
+        return f"<h1>שגיאה בהורדה</h1><p>נראה שיוטיוב חסמו את הכתובת של השרת הזה.</p><p>השגיאה המקורית: {str(e)}</p>"
 
 if __name__ == '__main__':
-    # הרצה מקומית בלבד
     app.run(debug=True)
