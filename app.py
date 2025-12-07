@@ -24,7 +24,7 @@ HTML_TEMPLATE = """
 <body>
     <h1>🚀 מוריד סרטונים (Render + Cookies)</h1>
     <form action="/download" method="post" onsubmit="document.getElementById('spin').style.display='block'">
-        <input type="text" name="url" placeholder="הדבק קישור יוטיוב..." required>
+        <input type="text" name="url" placeholder="הדבק קישור..." required>
         <button type="submit">הורד</button>
     </form>
     <div id="spin" class="spinner"></div>
@@ -49,11 +49,12 @@ def download_video():
         return "שגיאה קריטית: קובץ cookies.txt לא נמצא בשרת! העלה אותו לגיטהאב."
 
     ydl_opts = {
-        'format': 'best',
+        # שנהנו את זה כדי שיקח את האיכות הכי טובה שהיא לא מעל 720p
+        'format': 'best[height<=720]/best',
         'outtmpl': f"{temp_filename}.%(ext)s",
         'noplaylist': True,
         'quiet': True,
-        'cookiefile': 'cookies.txt'  # <--- הנה הקסם שעוקף את החסימה
+        'cookiefile': 'cookies.txt'
     }
 
     try:
