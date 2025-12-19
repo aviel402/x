@@ -1,88 +1,170 @@
-from flask import Flask, render_template_string, request, send_file
+from flask import Flask, render_template_string, request, Response
 import yt_dlp
 import os
 import uuid
+import json
 
 app = Flask(__name__)
 
-# עיצוב הדף (HTML בתוך הקוד לנוחות)
-HTML_TEMPLATE = """
+HTML = """
 <!DOCTYPE html>
 <html lang="he" dir="rtl">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>מוריד עם Cookies</title>
-    <style>
-        body { font-family: sans-serif; text-align: center; padding: 50px; background: #222; color: white; }
-        input { padding: 10px; width: 300px; border-radius: 5px; }
-        button { padding: 10px 20px; background: red; color: white; border: none; cursor: pointer; border-radius: 5px; font-weight: bold; }
-        .spinner { display: none; margin: 20px auto; border: 4px solid #f3f3f3; border-top: 4px solid red; border-radius: 50%; width: 30px; height: 30px; animation: spin 2s linear infinite; }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-    </style>
+<meta charset="UTF-8">
+<title>🔥 Video Downloader Pro</title>
+<style>
+body {
+    background: linear-gradient(135deg,#0f0f0f,#1a1a1a);
+    color:white;
+    font-family: Arial;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    height:100vh;
+}
+.card {
+    background: rgba(255,255,255,0.08);
+    backdrop-filter: blur(10px);
+    padding:30px;
+    border-radius:20px;
+    width:380px;
+    box-shadow: 0 0 40px rgba(255,0,0,0.3);
+}
+h1 { margin-bottom:20px; }
+input, select {
+    width:100%;
+    padding:12px;
+    margin:10px 0;
+    border-radius:10px;
+    border:none;
+}
+button {
+    width:100%;
+    padding:14px;
+    background:red;
+    color:white;
+    font-size:18px;
+    border:none;
+    border-radius:12px;
+    cursor:pointer;
+}
+.progress-box {
+    margin-top:20px;
+    display:none;
+}
+.progress {
+    height:18px;
+    background:#333;
+    border-radius:20px;
+    overflow:hidden;
+}
+.bar {
+    height:100%;
+    width:0%;
+    background: linear-gradient(90deg,red,orange);
+    transition:0.3s;
+}
+.percent { margin-top:8px; }
+</style>
 </head>
 <body>
-    <h1>🚀 מוריד סרטונים (Render + Cookies)</h1>
-    <form action="/download" method="post" onsubmit="document.getElementById('spin').style.display='block'">
-        <input type="text" name="url" placeholder="הדבק קישור..." required>
-        <button type="submit">הורד</button>
-    </form>
-    <div id="spin" class="spinner"></div>
+
+<div class="card">
+<h1>🚀 מוריד חכם</h1>
+
+<input id="url" placeholder="הדבק קישור">
+<select id="type">
+  <option value="mp4">🎬 וידאו MP4</option>
+  <option value="mp3">🎵 אודיו MP3</option>
+</select>
+
+<button onclick="start()">הורד</button>
+
+<div class="progress-box" id="box">
+  <div class="progress">
+    <div class="bar" id="bar"></div>
+  </div>
+  <div class="percent" id="percent">0%</div>
+</div>
+
+</div>
+
+<script>
+function start(){
+  document.getElementById('box').style.display='block'
+  fetch('/download',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({
+      url:document.getElementById('url').value,
+      type:document.getElementById('type').value
+    })
+  }).then(r=>{
+    const reader = r.body.getReader()
+    let received = 0
+    const total = +r.headers.get('Content-Length')
+    return reader.read().then(function process({done,value}){
+      if(done) return
+      received += value.length
+      let p = Math.floor(received/total*100)
+      bar.style.width=p+'%'
+      percent.innerText=p+'%'
+      return reader.read().then(process)
+    })
+  })
+}
+</script>
+
 </body>
 </html>
 """
 
 @app.route('/')
 def home():
-    return render_template_string(HTML_TEMPLATE)
+    return render_template_string(HTML)
 
 @app.route('/download', methods=['POST'])
-def download_video():
-    video_url = request.form.get('url')
-    if not video_url: return "חסר קישור", 400
+def download():
+    data = request.get_json()
+    url = data['url']
+    mode = data['type']
 
-    unique_id = str(uuid.uuid4())
-    temp_filename = f"video_{unique_id}"
-    
-    # בדיקה שקובץ הקוקיז קיים בתיקייה
-    if not os.path.exists("cookies.txt"):
-        return "שגיאה קריטית: קובץ cookies.txt לא נמצא בשרת! העלה אותו לגיטהאב."
+    uid = str(uuid.uuid4())
+    out = f"file_{uid}"
 
     ydl_opts = {
-        # שנהנו את זה כדי שיקח את האיכות הכי טובה שהיא לא מעל 720p
-        'format': 'best[height<=720]/best',
-        'outtmpl': f"{temp_filename}.%(ext)s",
-        'noplaylist': True,
         'quiet': True,
+        'noplaylist': True,
         'cookiefile': 'cookies.txt'
     }
 
-    try:
-        final_filename = None
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(video_url, download=True)
-            final_filename = ydl.prepare_filename(info)
+    if mode == 'mp3':
+        ydl_opts.update({
+            'format':'bestaudio',
+            'outtmpl': out,
+            'postprocessors':[{
+                'key':'FFmpegExtractAudio',
+                'preferredcodec':'mp3'
+            }]
+        })
+    else:
+        ydl_opts.update({
+            'format':'best[height<=720]',
+            'outtmpl': out + '.%(ext)s'
+        })
 
-        def generate():
-            with open(final_filename, 'rb') as f:
-                yield from f
-            os.remove(final_filename)
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        info = ydl.extract_info(url, download=True)
+        filename = ydl.prepare_filename(info)
 
-        download_name = f"{info.get('title', 'video')}.{info.get('ext', 'mp4')}"
-        
-        # טיפול בשמות בעברית להורדה תקינה
-        try:
-            download_name.encode('latin-1')
-        except UnicodeEncodeError:
-            download_name = 'video_download.mp4'
+    def stream():
+        with open(filename,'rb') as f:
+            yield from f
+        os.remove(filename)
 
-        from flask import Response
-        return Response(generate(), mimetype="application/octet-stream", 
-                       headers={"Content-Disposition": f"attachment;filename={download_name}"})
+    return Response(stream(), headers={
+        "Content-Disposition":"attachment"
+    })
 
-    except Exception as e:
-        if final_filename and os.path.exists(final_filename): os.remove(final_filename)
-        return f"<h1>שגיאה</h1><p>{e}</p>"
-
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000)
