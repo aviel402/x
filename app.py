@@ -14,27 +14,53 @@ HTML = """
 <html lang="he" dir="rtl">
 <head>
 <meta charset="utf-8">
-<title>Nokia Render Converter</title>
+<title>Nokia Cloud Converter</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
-body{margin:0;min-height:100vh;display:flex;justify-content:center;align-items:center;background:radial-gradient(circle at top,#1a1a2e,#16213e);font-family:'Segoe UI',Arial;color:white}
-.box{width:90%;max-width:450px;padding:25px;border-radius:16px;background:rgba(255,255,255,.05);backdrop-filter:blur(10px);box-shadow:0 8px 32px rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1)}
-h2{text-align:center;margin-top:0;color:#4cc9f0}
-input,select,button{width:100%;padding:14px;margin:8px 0;border:none;border-radius:8px;font-size:16px;box-sizing:border-box}
-input,select{background:rgba(255,255,255,0.1);color:white;outline:none}
-button{background:linear-gradient(45deg,#4cc9f0,#4361ee);color:white;font-weight:bold;cursor:pointer;transition:0.3s}
-button:disabled{opacity:0.6;cursor:not-allowed}
-.switch-container{display:flex;align-items:center;justify-content:space-between;background:rgba(255,255,255,0.05);padding:12px;border-radius:8px;margin-top:10px}
-.switch{position:relative;display:inline-block;width:50px;height:24px}
-.switch input{opacity:0;width:0;height:0}
-.slider{position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background-color:#4a5568;transition:.4s;border-radius:34px}
-.slider:before{position:absolute;content:"";height:16px;width:16px;left:4px;bottom:4px;background-color:white;transition:.4s;border-radius:50%}
-input:checked+.slider{background-color:#4361ee}
-input:checked+.slider:before{transform:translateX(26px)}
-.progress{height:10px;background:#2d3748;border-radius:10px;overflow:hidden;margin-top:15px}
-.bar{height:100%;width:0%;background:#4cc9f0;transition:width 0.3s}
-.status-area{text-align:center;margin-top:10px;font-size:14px;color:#a0aec0}
-img{width:100%;border-radius:8px;margin-top:15px;display:none;border:2px solid rgba(255,255,255,0.1)}
+/* עיצוב כללי */
+body { margin:0; min-height:100vh; display:flex; justify-content:center; align-items:center; 
+       background:radial-gradient(circle at top,#1a1a2e,#16213e); font-family:'Segoe UI',Arial,sans-serif; color:white; }
+
+/* הקופסה הראשית */
+.box { width:90%; max-width:450px; padding:25px; border-radius:16px; 
+       background:rgba(255,255,255,.05); backdrop-filter:blur(10px); 
+       box-shadow:0 8px 32px rgba(0,0,0,0.3); border:1px solid rgba(255,255,255,0.1); }
+
+h2 { text-align:center; margin-top:0; color:#4cc9f0; }
+
+/* שדות וכפתורים */
+input, select, button { width:100%; padding:14px; margin:8px 0; border:none; 
+                        border-radius:8px; font-size:16px; box-sizing:border-box; }
+
+input, select { background:rgba(255,255,255,0.1); color:white; outline:none; }
+
+/* --- התיקון: צובע את האפשרויות ברשימה בכהה כדי שיראו אותן --- */
+select option {
+    background-color: #16213e; 
+    color: white;
+}
+
+button { background:linear-gradient(45deg,#4cc9f0,#4361ee); color:white; 
+         font-weight:bold; cursor:pointer; transition:0.3s; }
+button:disabled { opacity:0.6; cursor:not-allowed; }
+
+/* המפסק (Switch) */
+.switch-container { display:flex; align-items:center; justify-content:space-between; 
+                    background:rgba(255,255,255,0.05); padding:12px; border-radius:8px; margin-top:10px; }
+.switch { position:relative; display:inline-block; width:50px; height:24px; }
+.switch input { opacity:0; width:0; height:0; }
+.slider { position:absolute; cursor:pointer; top:0; left:0; right:0; bottom:0; 
+          background-color:#4a5568; transition:.4s; border-radius:34px; }
+.slider:before { position:absolute; content:""; height:16px; width:16px; left:4px; bottom:4px; 
+                 background-color:white; transition:.4s; border-radius:50%; }
+input:checked+.slider { background-color:#4361ee; }
+input:checked+.slider:before { transform:translateX(26px); }
+
+/* מד התקדמות ותמונה */
+.progress { height:10px; background:#2d3748; border-radius:10px; overflow:hidden; margin-top:15px; }
+.bar { height:100%; width:0%; background:#4cc9f0; transition:width 0.3s; }
+.status-area { text-align:center; margin-top:10px; font-size:14px; color:#a0aec0; }
+img { width:100%; border-radius:8px; margin-top:15px; display:none; border:2px solid rgba(255,255,255,0.1); }
 </style>
 </head>
 <body>
@@ -72,16 +98,18 @@ img{width:100%;border-radius:8px;margin-top:15px;display:none;border:2px solid r
 let id=null;
 function start(){
     const btn = document.getElementById('btn');
+    const url = document.getElementById('url').value;
+    const mode = document.getElementById('mode').value;
+    const nokia = document.getElementById('nokiaSwitch').checked;
+
+    if(!url){ alert("נא להדביק קישור"); return; }
+
     btn.disabled = true;
     document.getElementById('status').innerText = "מתחיל...";
     
     fetch('/start', {
         method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({
-            url: url.value, 
-            mode: mode.value, 
-            nokia: document.getElementById('nokiaSwitch').checked
-        })
+        body: JSON.stringify({ url: url, mode: mode, nokia: nokia })
     }).then(r=>r.json()).then(d=>{
         if(d.error) { throw d.error }
         id = d.id;
@@ -122,7 +150,6 @@ function poll(){
 </body>
 </html>
 """
-
 @app.route('/')
 def home():
     return render_template_string(HTML)
