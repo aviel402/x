@@ -15,6 +15,7 @@ HTML = """
 <html lang="he" dir="rtl">
 <head>
 <meta charset="utf-8">
+<meta name="google-site-verification" content="e_GuRsqVZunYgcIVNlkpDhD2I3l31jJ8AwjEVRxvqi0" />
 <title>Nokia Cloud Converter</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
