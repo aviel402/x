@@ -10,26 +10,23 @@ if os.path.exists("bin"):
 app = Flask(__name__)
 tasks = {}
 
-# --- מערכת ניקוי אוטומטית (מונע קריסת זיכרון) ---
+# --- Cleanup Loop ---
 def cleanup_loop():
     while True:
         try:
             current_time = time.time()
             to_delete = []
             for uid, task in list(tasks.items()):
-                # מחיקה אם עברו 20 דקות
                 if current_time - task.get('timestamp', 0) > 1200:
                     fpath = task.get('file')
                     if fpath and os.path.exists(fpath):
                         try: os.remove(fpath)
                         except: pass
-                    # מחיקת קבצים זמניים
                     for f in os.listdir('.'):
                         if f.startswith(uid):
                             try: os.remove(f)
                             except: pass
                     to_delete.append(uid)
-            
             for uid in to_delete:
                 del tasks[uid]
         except: pass
@@ -37,7 +34,7 @@ def cleanup_loop():
 
 threading.Thread(target=cleanup_loop, daemon=True).start()
 
-# --- עיצוב חדש: מסוף CRT רטרו ---
+# --- HTML (זהה לעיצוב הרטרו שאהבת) ---
 HTML = """
 <!doctype html>
 <html lang="he" dir="rtl">
@@ -47,68 +44,33 @@ HTML = """
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
 <style>
-/* איפוס והגדרות בסיס */
 :root { --green: #33ff00; --dim: #003300; --bg: #050505; }
 body { margin:0; min-height:100vh; background-color: var(--bg); 
        font-family: 'VT323', monospace; color: var(--green);
        display: flex; justify-content: center; align-items: center; 
        overflow-x: hidden; text-transform: uppercase; letter-spacing: 1px;}
-
-/* אפקט מסך CRT */
-body::before {
-    content: " "; display: block; position: absolute; top: 0; left: 0; bottom: 0; right: 0;
+body::before { content: " "; display: block; position: absolute; top: 0; left: 0; bottom: 0; right: 0;
     background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
-    z-index: 2; background-size: 100% 2px, 3px 100%; pointer-events: none;
-}
-.scanline {
-    width: 100%; height: 100px; z-index: 10;
-    background: linear-gradient(0deg, rgba(0,0,0,0) 0%, rgba(33, 255, 0, 0.04) 50%, rgba(0,0,0,0) 100%);
-    opacity: 0.1; position: absolute; bottom: 100%; animation: scanline 10s linear infinite; pointer-events: none;
-}
+    z-index: 2; background-size: 100% 2px, 3px 100%; pointer-events: none; }
+.scanline { width: 100%; height: 100px; z-index: 10; background: linear-gradient(0deg, rgba(0,0,0,0) 0%, rgba(33, 255, 0, 0.04) 50%, rgba(0,0,0,0) 100%); opacity: 0.1; position: absolute; bottom: 100%; animation: scanline 10s linear infinite; pointer-events: none; }
 @keyframes scanline { 0% {bottom:100%;} 80% {bottom:100%;} 100% {bottom:-100%;} }
-
-/* קופסת המסוף */
-.terminal {
-    width: 90%; max-width: 420px;
-    border: 2px solid var(--green);
-    padding: 20px;
-    position: relative;
-    box-shadow: 0 0 20px var(--dim), inset 0 0 20px var(--dim);
-    z-index: 3;
-    background: rgba(0, 10, 0, 0.9);
-}
-
+.terminal { width: 90%; max-width: 420px; border: 2px solid var(--green); padding: 20px; position: relative; box-shadow: 0 0 20px var(--dim), inset 0 0 20px var(--dim); z-index: 3; background: rgba(0, 10, 0, 0.9); }
 h2 { margin: 0 0 15px 0; font-size: 32px; text-shadow: 0 0 5px var(--green); border-bottom: 2px dashed var(--dim); padding-bottom:10px; text-align: center;}
 label { display: block; margin-top: 15px; font-size: 20px;}
-
-/* קלטים וכפתורים */
-input, select, button { 
-    width: 100%; background: #000; border: 1px solid var(--green);
-    color: var(--green); padding: 10px; font-family: 'VT323', monospace; font-size: 20px;
-    margin-top: 5px; box-sizing: border-box; outline: none;
-}
+input, select, button { width: 100%; background: #000; border: 1px solid var(--green); color: var(--green); padding: 10px; font-family: 'VT323', monospace; font-size: 20px; margin-top: 5px; box-sizing: border-box; outline: none;}
 input:focus, select:focus { background: var(--dim); box-shadow: 0 0 8px var(--green); }
-::placeholder { color: #005500; }
-
 button { margin-top: 20px; background: var(--green); color: #000; font-weight: bold; cursor: pointer; border:none;}
 button:hover { background: #fff; box-shadow: 0 0 15px var(--green); }
-button:disabled { background: var(--dim); color: var(--green); cursor: wait; box-shadow: none;}
-
-/* תיבת סימון רטרו */
+button:disabled { background: var(--dim); color: var(--green); cursor: wait; }
 .checkbox-wrapper { display: flex; justify-content: space-between; align-items: center; border: 1px solid var(--dim); padding: 8px; margin-top: 10px; }
 input[type="checkbox"] { width: auto; transform: scale(1.5); accent-color: var(--green); cursor: pointer;}
-
-/* אזור סטטוס */
 .output { margin-top: 20px; border-top: 2px dashed var(--dim); padding-top: 10px; display: none;}
 .prog-container { width: 100%; border: 1px solid var(--green); height: 20px; padding: 2px; margin: 10px 0; box-sizing: border-box;}
 .prog-bar { height: 100%; background: repeating-linear-gradient(90deg, var(--green) 0px, var(--green) 10px, #000 10px, #000 12px); width: 0%; transition: width 0.2s; }
 .log { font-size: 18px; margin-top: 5px; min-height: 1.2em;}
 .blink { animation: blink 1s step-end infinite; }
 @keyframes blink { 50% { opacity: 0; } }
-
 img { width: 100px; border: 1px solid var(--green); display:none; margin: 0 auto; display: block; filter: grayscale(100%) contrast(1.2) sepia(100%) hue-rotate(90deg); }
-
-/* לוגו אווטאר קטן למעלה */
 .header-dec { display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 16px; color: var(--dim);}
 </style>
 </head>
@@ -117,23 +79,18 @@ img { width: 100px; border: 1px solid var(--green); display:none; margin: 0 auto
 <div class="terminal">
     <div class="header-dec"><span>SYS.ROOT</span><span>ONLINE</span></div>
     <h2>&lt;NOKIA_CLOUD /&gt;</h2>
-    
     <label>&gt; TARGET_URL:</label>
     <input id="url" placeholder="ENTER LINK HERE...">
-
     <label>&gt; OUTPUT_FORMAT:</label>
     <select id="mode">
         <option value="360">VIDEO [MP4/NORMAL]</option>
         <option value="mp3">AUDIO [MP3/MUSIC]</option>
     </select>
-
     <div class="checkbox-wrapper">
         <label for="nokiaSwitch" style="margin:0; cursor:pointer;">&gt; RETRO_MODE [AVI/240p]</label>
         <input type="checkbox" id="nokiaSwitch" checked>
     </div>
-
     <button onclick="execute()" id="btn">[ INITIALIZE ]</button>
-
     <div id="outputArea" class="output">
         <img id="thumb">
         <div class="log" style="text-align:center; margin-bottom:5px;" id="videoTitle"></div>
@@ -141,19 +98,13 @@ img { width: 100px; border: 1px solid var(--green); display:none; margin: 0 auto
         <div class="log">STATUS: <span id="status">WAITING</span><span class="blink">_</span></div>
     </div>
 </div>
-
 <script>
-let id = null;
-let pollInterval = null;
-
+let id=null, pollInterval=null;
 function execute() {
     const url = document.getElementById('url').value;
     const mode = document.getElementById('mode').value;
     const nokia = document.getElementById('nokiaSwitch').checked;
-
-    if (!url) { alert("ERROR: NO INPUT DATA"); return; }
-
-    // ממשק משתמש
+    if (!url) return;
     document.getElementById('btn').disabled = true;
     document.getElementById('btn').innerText = "[ PROCESSING... ]";
     document.getElementById('outputArea').style.display = 'block';
@@ -161,58 +112,46 @@ function execute() {
     document.getElementById('videoTitle').innerText = '';
     document.getElementById('bar').style.width = '0%';
     document.getElementById('status').innerText = "CONNECTING...";
-
     fetch('/start', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url: url, mode: mode, nokia: nokia })
     }).then(r => r.json()).then(d => {
         if(d.error) throw d.error;
         id = d.id;
         pollInterval = setInterval(checkStatus, 1000);
     }).catch(e => {
-        document.getElementById('status').innerText = "ERROR: " + e;
+        document.getElementById('status').innerText = "ERR: " + e;
         document.getElementById('btn').disabled = false;
         document.getElementById('btn').innerText = "[ RETRY ]";
     });
 }
-
 function checkStatus() {
     fetch('/progress/' + id).then(r => r.json()).then(d => {
         if (d.error) {
             clearInterval(pollInterval);
-            document.getElementById('status').innerText = "FATAL ERROR";
-            alert("SYSTEM HALTED: " + d.error);
-            window.location.reload();
+            document.getElementById('status').innerText = "SYSTEM HALTED: " + d.error;
+            document.getElementById('btn').disabled = false;
+            document.getElementById('btn').innerText = "[ RETRY ]";
             return;
         }
-
-        // עדכון גרפי
         document.getElementById('bar').style.width = d.percent + '%';
-        
         if (d.thumb && document.getElementById('thumb').style.display === 'none') {
             document.getElementById('thumb').src = d.thumb;
             document.getElementById('thumb').style.display = 'block';
         }
-        if (d.title) document.getElementById('videoTitle').innerText = d.title;
-
-        // טקסטים דינמיים
-        let status = "DOWNLOADING... " + d.percent + "%";
-        if (d.converting) status = "ENCODING >> " + (d.mode === 'nokia' ? 'AVI_XVID' : 'MP4');
-        if (d.done) status = "COMPLETED successfully.";
+        if (d.title) document.getElementById('videoTitle').innerText = d.title.substring(0,30);
         
+        let status = "DOWNLOADING... " + d.percent + "%";
+        if (d.converting) status = "ENCODING >> " + (d.mode === 'nokia' ? 'AVI' : 'MP4');
+        if (d.done) status = "COMPLETED.";
         document.getElementById('status').innerText = status;
 
         if (d.done) {
             clearInterval(pollInterval);
             document.getElementById('btn').disabled = false;
             document.getElementById('btn').innerText = "[ DOWNLOAD FILE ]";
-            document.getElementById('btn').onclick = function() {
-                window.location.href = '/file/' + id;
-                // אחרי ההורדה מאפשר איפוס
-                setTimeout(() => { document.getElementById('btn').innerText = "[ CONVERT NEW ]"; document.getElementById('btn').onclick = () => window.location.reload(); }, 2000);
-            };
-            window.location.href = '/file/' + id; // הורדה אוטומטית
+            document.getElementById('btn').onclick = function() { window.location.href = '/file/' + id; };
+            window.location.href = '/file/' + id;
         }
     });
 }
@@ -225,21 +164,30 @@ def processing_thread(uid, url, mode_val, is_nokia):
     try:
         tasks[uid]['timestamp'] = time.time()
         
-        # 1. Download Options
+        # ---------------------------------------------------------
+        # התיקון הקריטי ל-Youtube: התחזות לאנדרואיד
+        # זה עוקף את חסימות הבוטים של גוגל
+        # ---------------------------------------------------------
         ydl_opts = {
             'quiet': True,
             'outtmpl': f"{uid}_src.%(ext)s",
-            'format': 'best[height<=360]', # Forcing lower quality for Nokia/Speed
-            'nocheckcertificate': True
+            # פורמט חכם יותר: מנסה למצוא MP4 ישיר, אם לא, ממזג וידאו ואודיו
+            'format': 'bestvideo[height<=360][ext=mp4]+bestaudio[ext=m4a]/best[height<=360]/best',
+            'nocheckcertificate': True,
+            # ה-Arg הזה קריטי בשרתים (טוען שאנחנו אפליקציית מובייל)
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['android', 'ios'],
+                }
+            }
         }
 
-        # Handle MP3 specifics (Not nokia video)
+        # התעלמות מקוקיז בכוונה - הן גורמות לבעיות אם הן לא מה-IP של השרת
+        # if os.path.exists('cookies.txt'): ... (הוסר כדי למנוע חסימות)
+
         if mode_val == 'mp3' and not is_nokia:
             ydl_opts['format'] = 'bestaudio/best'
             ydl_opts['postprocessors'] = [{'key': 'FFmpegExtractAudio','preferredcodec': 'mp3'}]
-
-        if os.path.exists('cookies.txt'):
-            ydl_opts['cookiefile'] = 'cookies.txt'
 
         def hook(d):
             if d['status'] == 'downloading':
@@ -253,27 +201,35 @@ def processing_thread(uid, url, mode_val, is_nokia):
 
         ydl_opts['progress_hooks'] = [hook]
 
-        # 2. Download Execution
         dl_filename = None
         info = None
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            # 1. ניסיון הורדה
             info = ydl.extract_info(url, download=True)
             tasks[uid]['title'] = info.get('title', 'Unknown')
             tasks[uid]['thumb'] = info.get('thumbnail')
             
-            # Identify file
-            for f in os.listdir('.'):
-                if f.startswith(f"{uid}_src"):
-                    dl_filename = f
-                    break
+            # 2. זיהוי שם הקובץ שירד
+            # ייתכן שזה יהיה mkv אם התבצע מיזוג, או mp4/webm
+            base = ydl.prepare_filename(info)
+            # בודקים אם הקובץ קיים בדיוק בשם ש-ydl חשב
+            if os.path.exists(base):
+                dl_filename = base
+            else:
+                # אם לא, מחפשים לפי ה-UID
+                for f in os.listdir('.'):
+                    if f.startswith(f"{uid}_src"):
+                        dl_filename = f
+                        break
         
-        if not dl_filename: raise Exception("File system error: not found")
+        if not dl_filename or not os.path.exists(dl_filename):
+            raise Exception("Download Error: File not created")
 
-        # 3. Post-Processing / Rename
+        # עיבוד סופי
         safe_title = "".join([c for c in info.get('title','video') if c.isalnum() or c in ' .-_']).strip()
         
         if is_nokia and mode_val != 'mp3':
-            # === NOKIA MODE: AVI/XVID/QVGA ===
+            # === NOKIA MODE: AVI ===
             tasks[uid]['mode'] = 'nokia'
             final_name = f"{uid}_nokia.avi"
             display_name = f"{safe_title}.avi"
@@ -281,30 +237,31 @@ def processing_thread(uid, url, mode_val, is_nokia):
             cmd = [
                 'ffmpeg', '-y', '-i', dl_filename,
                 '-vf', 'scale=320:240:force_original_aspect_ratio=decrease,pad=320:240:(ow-iw)/2:(oh-ih)/2',
-                '-r', '20', '-c:v', 'mpeg4', '-vtag', 'xvid', '-b:v', '350k',
+                '-r', '20', 
+                '-c:v', 'mpeg4', '-vtag', 'xvid', '-q:v', '10', # q:v נותן דחיסה מאוזנת
                 '-c:a', 'libmp3lame', '-ac', '1', '-ar', '22050', '-b:a', '64k',
                 final_name
             ]
             subprocess.run(cmd, check=True)
-            if os.path.exists(dl_filename): os.remove(dl_filename)
+            try: os.remove(dl_filename)
+            except: pass
             
         elif mode_val == 'mp3':
-             # Already mp3, just rename logic
+             # אודיו
              ext = dl_filename.split('.')[-1]
              final_name = f"{uid}_audio.{ext}"
              display_name = f"{safe_title}.{ext}"
              os.rename(dl_filename, final_name)
         
         else:
-             # Standard MP4 Rename
+             # רגיל (MP4) - המרה בטוחה למקרה שהגיע פורמט MKV/WebM
              final_name = f"{uid}_vid.mp4"
              display_name = f"{safe_title}.mp4"
-             try:
-                 # Fast start conversion ensures it works on all phones
-                 subprocess.run(['ffmpeg','-y','-i',dl_filename,'-c','copy','-movflags','+faststart',final_name], check=True)
-                 os.remove(dl_filename)
-             except:
-                 os.rename(dl_filename, final_name)
+             # המרה מהירה ל-MP4
+             cmd = ['ffmpeg', '-y', '-i', dl_filename, '-c:v', 'libx264', '-c:a', 'aac', '-strict', 'experimental', final_name]
+             subprocess.run(cmd, check=True)
+             try: os.remove(dl_filename)
+             except: pass
 
         tasks[uid]['file'] = final_name
         tasks[uid]['display_name'] = display_name
@@ -312,6 +269,7 @@ def processing_thread(uid, url, mode_val, is_nokia):
         tasks[uid]['done'] = True
         
     except Exception as e:
+        print(f"Error for {uid}: {e}")
         tasks[uid]['error'] = str(e)
         try:
             for f in os.listdir('.'):
@@ -328,7 +286,7 @@ def start():
     uid = str(uuid.uuid4())
     is_nokia = data.get('nokia', False)
     mode = data.get('mode', '360')
-
+    
     tasks[uid] = {
         'percent': 0, 
         'done': False, 
@@ -336,7 +294,7 @@ def start():
         'converting': False,
         'timestamp': time.time()
     }
-
+    
     threading.Thread(target=processing_thread, args=(uid, data['url'], mode, is_nokia)).start()
     return jsonify({'id': uid})
 
@@ -347,13 +305,13 @@ def prog(id):
 @app.route('/file/<id>')
 def get_file(id):
     task = tasks.get(id)
-    if not task: return "FILE_DELETED_OR_NOT_EXIST", 404
+    if not task: return "FILE_DELETED", 404
     fpath = task.get('file')
-    if not fpath or not os.path.exists(fpath): return "SYSTEM_ERROR: FILE MISSING", 404
+    if not fpath or not os.path.exists(fpath): return "ERROR_MISSING_FILE", 404
 
-    dname = task.get('display_name', 'file.bin')
+    dname = task.get('display_name', 'video')
     try: encoded = quote(dname)
-    except: encoded = "file"
+    except: encoded = "download"
     
     def generate():
         with open(fpath, "rb") as f:
@@ -362,10 +320,4 @@ def get_file(id):
                 if not chunk: break
                 yield chunk
     
-    res = Response(generate(), mimetype="application/octet-stream")
-    res.headers["Content-Disposition"] = f"attachment; filename*=UTF-8''{encoded}"
-    return res
-app.route('/googlebf5e9f4bd69d6b9a.html')
-def a():return 'googlebf5e9f4bd69d6b9a.html'
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, threaded=True)
+    res = Response(generate(), mimety
