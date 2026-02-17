@@ -365,6 +365,7 @@ def get_file(id):
     res = Response(generate(), mimetype="application/octet-stream")
     res.headers["Content-Disposition"] = f"attachment; filename*=UTF-8''{encoded}"
     return res
-
+app.route('/googlebf5e9f4bd69d6b9a.html')
+def a():return 'googlebf5e9f4bd69d6b9a.html'
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, threaded=True)
