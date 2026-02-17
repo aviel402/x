@@ -5,34 +5,35 @@ set -o errexit
 echo "🔹 Installing dependencies..."
 pip install -r requirements.txt
 
-# 2. יצירת תיקייה
-echo "🔹 Creating bin directory..."
+# 2. יצירת תיקיות
+echo "🔹 Preparing directories..."
 mkdir -p bin
+mkdir -p temp_ffmpeg  # תיקייה זמנית לחילוץ
 
-# 3. הורדת FFmpeg ממקור יציב ומהיר (GitHub של yt-dlp)
+# 3. הורדת FFmpeg
 echo "🔹 Downloading FFmpeg..."
 curl -L -o ffmpeg.tar.xz https://github.com/yt-dlp/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz
 
-# 4. בדיקה שההורדה באמת הצליחה (שהקובץ לא ריק)
-filesize=$(stat -c%s ffmpeg.tar.xz)
-if (( filesize < 1000000 )); then
-    echo "❌ Error: Download failed (file too small). Exiting."
-    exit 1
-fi
+# 4. חילוץ לתיקייה זמנית (כדי לא ללכלך את bin)
+echo "🔹 Extracting..."
+tar -xJf ffmpeg.tar.xz -C temp_ffmpeg
 
-# 5. חילוץ הקובץ (דגל J מיועד לקבצי xz)
-echo "🔹 Extracting FFmpeg..."
-tar -xJf ffmpeg.tar.xz -C bin --strip-components=1
+# 5. ציד ומיקום מחדש: מוצאים את ffmpeg ו-ffprobe בכל תת-תיקייה ומעבירים ל-bin
+echo "🔹 Locating binaries..."
+find temp_ffmpeg -name "ffmpeg" -type f -exec mv -v {} bin/ \;
+find temp_ffmpeg -name "ffprobe" -type f -exec mv -v {} bin/ \;
 
-# 6. בדיקה סופית ומתן הרשאות
+# 6. מתן הרשאות ריצה
+chmod +x bin/ffmpeg
+chmod +x bin/ffprobe
+
+# 7. בדיקה וניקוי
 if [ -f bin/ffmpeg ]; then
-    chmod +x bin/ffmpeg
     echo "✅ FFmpeg installed successfully!"
+    # מחיקת התיקייה הזמנית והקובץ הדחוס
+    rm -rf temp_ffmpeg ffmpeg.tar.xz
 else
-    echo "❌ Error: ffmpeg binary not found in bin/"
-    ls -R bin/
+    echo "❌ Error: ffmpeg binary not found even after search."
+    ls -R temp_ffmpeg
     exit 1
 fi
-
-# 7. ניקוי
-rm ffmpeg.tar.xz
