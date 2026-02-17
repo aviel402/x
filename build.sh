@@ -1,34 +1,38 @@
 #!/usr/bin/env bash
-# יוצאים מיד אם פקודה נכשלת
 set -o errexit
 
-echo "🔹 Installing Python requirements..."
+# 1. התקנת ספריות פייתון
+echo "🔹 Installing dependencies..."
 pip install -r requirements.txt
 
+# 2. יצירת תיקייה
 echo "🔹 Creating bin directory..."
 mkdir -p bin
 
-echo "🔹 Downloading FFmpeg static build..."
-# מורידים קודם לקובץ כדי לוודא שההורדה הצליחה
-curl -L -o ffmpeg.tar.xz https://github.com/eugeneware/ffmpeg-static/releases/latest/download/linux-x64.tar.gz
+# 3. הורדת FFmpeg ממקור יציב ומהיר (GitHub של yt-dlp)
+echo "🔹 Downloading FFmpeg..."
+curl -L -o ffmpeg.tar.xz https://github.com/yt-dlp/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz
 
-echo "🔹 Extracting FFmpeg..."
-# חילוץ עדין יותר (משתמש ב-gz מהמקור היציב יותר של גיטהאב)
-tar -xvz -f ffmpeg.tar.gz -C bin
-
-# אם התיקייה שחולצה לא נקראת 'ffmpeg' (תלוי בארכיון), מזיזים את הבינארי לתיקייה הנכונה
-# בקובץ הזה בדרך כלל הבינארי נמצא ישר
-if [ -f bin/ffmpeg ]; then
-    echo "✅ FFmpeg binary found directly."
-else
-    # חיפוש והזזה במידה וזה בתיקיית משנה
-    find bin -name "ffmpeg" -type f -exec mv {} bin/ \;
+# 4. בדיקה שההורדה באמת הצליחה (שהקובץ לא ריק)
+filesize=$(stat -c%s ffmpeg.tar.xz)
+if (( filesize < 1000000 )); then
+    echo "❌ Error: Download failed (file too small). Exiting."
+    exit 1
 fi
 
-# נותנים הרשאות ריצה ליתר ביטחון
-chmod +x bin/ffmpeg
+# 5. חילוץ הקובץ (דגל J מיועד לקבצי xz)
+echo "🔹 Extracting FFmpeg..."
+tar -xJf ffmpeg.tar.xz -C bin --strip-components=1
 
-echo "🔹 Cleaning up..."
-rm ffmpeg.tar.gz
+# 6. בדיקה סופית ומתן הרשאות
+if [ -f bin/ffmpeg ]; then
+    chmod +x bin/ffmpeg
+    echo "✅ FFmpeg installed successfully!"
+else
+    echo "❌ Error: ffmpeg binary not found in bin/"
+    ls -R bin/
+    exit 1
+fi
 
-echo "✅ Build script finished successfully!"
+# 7. ניקוי
+rm ffmpeg.tar.xz
