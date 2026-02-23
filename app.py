@@ -1,249 +1,169 @@
-import threading
-from flask import Flask, request, Response, jsonify, render_template_string
-import yt_dlp, uuid, os, subprocess, time, sys
-from urllib.parse import quote
-
-# הגדרות שרת
-DOWNLOAD_DIR = "downloads"
-if not os.path.exists(DOWNLOAD_DIR):
-    os.makedirs(DOWNLOAD_DIR)
-
-if os.path.exists("bin"):
-    os.environ["PATH"] += os.pathsep + os.path.join(os.getcwd(), "bin")
+import os, threading, uuid, time, subprocess, yt_dlp
+from flask import Flask, request, jsonify, send_from_directory, render_template_string
 
 app = Flask(__name__)
 tasks = {}
-# הגבלת הורדות מקבילות (למניעת קריסת השרת)
-download_semaphore = threading.Semaphore(3)
 
-def cleanup_loop():
-    """מנקה קבצים ישנים מעל 20 דקות"""
-    while True:
-        try:
-            current_time = time.time()
-            for uid, task in list(tasks.items()):
-                if current_time - task.get('timestamp', 0) > 1200:
-                    fpath = task.get('file')
-                    if fpath and os.path.exists(fpath):
-                        try: os.remove(fpath)
-                        except: pass
-                    tasks.pop(uid, None)
-        except Exception as e:
-            print(f"Cleanup error: {e}")
-        time.sleep(60)
+# הגדרות FFmpeg לשרת רנדר
+if os.path.exists("bin"):
+    os.environ["PATH"] += os.pathsep + os.path.join(os.getcwd(), "bin")
 
-threading.Thread(target=cleanup_loop, daemon=True).start()
+# מפת רזולוציות מדויקת
+RES_OPTIONS = {
+    "144p": "176:144",
+    "240p": "320:240", # הגודל של נוקיה
+    "360p": "480:360",
+    "480p": "640:480"
+}
 
-# --- עיצוב משופר (CSS Grid + Neon Glow) ---
-HTML = """
-<!doctype html>
+# --- הממשק הגרפי (האתר) ---
+HTML_PAGE = """
+<!DOCTYPE html>
 <html lang="he" dir="rtl">
 <head>
-<meta charset="utf-8">
-<title>CYBER-NOKIA LINK v2</title>
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<style>
-    :root {
-        --neon-blue: #00f3ff;
-        --neon-pink: #bc13fe;
-        --dark-bg: #05050a;
-    }
-    body {
-        background: var(--dark-bg);
-        color: var(--neon-blue);
-        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        display: flex; justify-content: center; align-items: center;
-        min-height: 100vh; margin: 0;
-        overflow: hidden;
-    }
-    .cyber-card {
-        background: rgba(10, 10, 20, 0.9);
-        border: 2px solid var(--neon-blue);
-        padding: 40px;
-        border-radius: 5px;
-        box-shadow: 0 0 20px var(--neon-blue);
-        width: 90%; max-width: 450px;
-        text-align: center;
-    }
-    input, select {
-        width: 100%; padding: 12px; margin: 10px 0;
-        background: #000; border: 1px solid var(--neon-pink);
-        color: #fff; border-radius: 3px; box-sizing: border-box;
-    }
-    button {
-        width: 100%; padding: 15px;
-        background: var(--neon-blue); color: #000;
-        font-weight: bold; border: none; cursor: pointer;
-        transition: 0.3s; text-transform: uppercase;
-    }
-    button:hover { background: var(--neon-pink); color: white; }
-    .console {
-        margin-top: 20px; background: #000;
-        height: 120px; overflow-y: auto;
-        font-family: monospace; font-size: 12px;
-        text-align: left; padding: 10px; border: 1px solid #333;
-    }
-    .progress-bar { height: 5px; background: #222; margin-top: 10px; }
-    .progress-fill { height: 100%; width: 0%; background: var(--neon-pink); transition: 0.3s; }
-</style>
+    <meta charset="UTF-8">
+    <title>Nokia Converter Cloud</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body { background: #000; color: #00ff41; font-family: 'Courier New', monospace; text-align: center; padding: 20px; }
+        .window { max-width: 500px; margin: auto; border: 2px solid #00ff41; padding: 25px; box-shadow: 0 0 15px #003b00; border-radius: 8px; background: rgba(0,20,0,0.9); }
+        h1 { font-size: 24px; border-bottom: 2px solid #00ff41; padding-bottom: 10px; margin-bottom: 25px; }
+        input, select, button { width: 100%; padding: 12px; margin: 8px 0; background: #000; border: 1px solid #00ff41; color: #fff; font-family: inherit; font-size: 16px; border-radius: 4px; box-sizing: border-box; }
+        button { background: #00ff41; color: #000; font-weight: bold; cursor: pointer; border: none; font-size: 18px; margin-top: 15px; }
+        button:hover { background: #fff; }
+        button:disabled { background: #333; color: #777; cursor: not-allowed; }
+        .status { margin-top: 20px; font-size: 14px; color: #fff; background: #111; padding: 10px; min-height: 20px; }
+        .nokia-badge { background: #003b00; color: #00ff41; padding: 2px 5px; font-size: 10px; vertical-align: middle; border-radius: 3px; border: 1px solid #00ff41; margin-right: 5px; }
+    </style>
 </head>
 <body>
-    <div class="cyber-card">
-        <h2>NOKIA SYNC <small style="font-size: 10px;">V2.1</small></h2>
-        <input type="text" id="url" placeholder="הכנס קישור ליוטיוב...">
-        <select id="mode">
-            <option value="nokia">Nokia 235 (3GP/MP4 240p)</option>
-            <option value="mp3">Audio Extraction (MP3)</option>
-            <option value="360">Standard MP4 (360p)</option>
-        </select>
-        <button onclick="start()" id="btn">INITIALIZE LINK</button>
-        <div class="console" id="console" style="display:none;">
-            <div id="log"></div>
-            <div class="progress-bar"><div class="progress-fill" id="bar"></div></div>
+    <div class="window">
+        <h1>CLOUD CONVERTER V4.1</h1>
+        <input type="text" id="url" placeholder=">> הדבק כאן לינק לסרטון_">
+        
+        <div style="text-align:right;">
+            <label>סוג קובץ:</label>
+            <select id="fmt">
+                <option value="mp4">VIDEO (MP4)</option>
+                <option value="avi">VIDEO (AVI - Retro)</option>
+                <option value="3gp">PHONE (3GP - Old Gen)</option>
+                <option value="mp3">MUSIC (MP3)</option>
+            </select>
+
+            <label>גודל ורזולוציה:</label>
+            <select id="res">
+                <option value="144p">144p - גודל מזערי</option>
+                <option value="240p" selected>240p - גודל אידיאלי (NOKIA)</option>
+                <option value="360p">360p - איכות רגילה (SD)</option>
+                <option value="480p">480p - איכות גבוהה (HQ)</option>
+            </select>
         </div>
+
+        <button onclick="ignite()" id="btn">בצע המרה והורדה</button>
+        <div class="status" id="stat">ממתין לפקודה...</div>
     </div>
 
     <script>
-        let tid;
-        function log(m) { 
-            const l = document.getElementById('log');
-            l.innerHTML = `> ${m}<br>` + l.innerHTML;
-        }
-
-        async function start() {
+        function ignite() {
             const url = document.getElementById('url').value;
-            if(!url) return;
-            
-            document.getElementById('btn').disabled = true;
-            document.getElementById('console').style.display = 'block';
-            log("מתחיל סנכרון...");
+            const fmt = document.getElementById('fmt').value;
+            const res = document.getElementById('res').value;
+            const btn = document.getElementById('btn');
+            const stat = document.getElementById('stat');
 
-            const res = await fetch('/start', {
+            if(!url) return alert("הזן לינק קודם כל!");
+
+            btn.disabled = true;
+            stat.innerText = "המתן, השרת מתחבר לענן...";
+
+            fetch('/start', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({url, mode: document.getElementById('mode').value})
+                body: JSON.stringify({url: url, format: fmt, res: res})
+            }).then(r => r.json()).then(data => {
+                const uid = data.id;
+                const poll = setInterval(() => {
+                    fetch('/status/' + uid).then(r => r.json()).then(s => {
+                        stat.innerText = "סטטוס: " + s.status;
+                        if(s.status === "DONE") {
+                            clearInterval(poll);
+                            stat.innerText = "✅ הושלם! הקובץ יורד מיד...";
+                            window.location.href = '/get/' + uid;
+                            btn.disabled = false;
+                        } else if(s.status.includes("ERR")) {
+                            clearInterval(poll);
+                            alert(s.status);
+                            btn.disabled = false;
+                        }
+                    });
+                }, 2000);
             });
-            const data = await res.json();
-            tid = data.id;
-            const interval = setInterval(async () => {
-                const pReq = await fetch('/progress/' + tid);
-                const p = await pReq.json();
-                
-                if(p.percent) document.getElementById('bar').style.width = p.percent + '%';
-                if(p.converting) log("מבצע המרה פרוטוקולית...");
-                
-                if(p.done) {
-                    clearInterval(interval);
-                    log("הושלם!");
-                    document.getElementById('btn').innerText = "הורד קובץ";
-                    document.getElementById('btn').disabled = false;
-                    document.getElementById('btn').onclick = () => window.location.href = '/file/' + tid;
-                }
-                if(p.error) {
-                    clearInterval(interval);
-                    log("שגיאה: " + p.error);
-                }
-            }, 1500);
         }
     </script>
 </body>
 </html>
 """
 
-def processing_task(uid, url, mode):
-    with download_semaphore:
-        try:
-            tasks[uid]['timestamp'] = time.time()
-            
-            # הגדרות הורדה
-            src_path = os.path.join(DOWNLOAD_DIR, f"{uid}_src")
-            ydl_opts = {
-                'quiet': True,
-                'outtmpl': src_path + '.%(ext)s',
-                'format': 'bestvideo[height<=480]+bestaudio/best[height<=480]',
-                'merge_output_format': 'mp4',
-                'nocheckcertificate': True,
-            }
+# --- פונקציית העיבוד ---
+def video_worker(uid, url, format_ext, resolution):
+    try:
+        tasks[uid]['status'] = "מוריד נתונים מהענן..."
+        ydl_opts = {
+            'outtmpl': f'{uid}_src.%(ext)s',
+            'format': 'bestvideo+bestaudio/best',
+            'merge_output_format': 'mp4',
+            'nocheckcertificate': True
+        }
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=True)
+            dl_file = ydl.prepare_filename(info)
 
-            if mode == 'mp3':
-                ydl_opts['format'] = 'bestaudio/best'
+        tasks[uid]['status'] = f"ממיר לפורמט {format_ext.upper()}..."
+        final_file = f"{uid}_final.{format_ext}"
+        scale = RES_OPTIONS.get(resolution, "320:240")
 
-            def hook(d):
-                if d['status'] == 'downloading':
-                    try:
-                        p = d.get('_percent_str', '0%').replace('%','')
-                        tasks[uid]['percent'] = int(float(p)) * 0.7 # 70% להורדה
-                    except: pass
+        if format_ext == "mp3":
+            cmd = ['ffmpeg', '-y', '-i', dl_file, '-vn', '-ab', '128k', final_file]
+        else:
+            # הגדרות מיוחדות לפי פורמט
+            cmd = ['ffmpeg', '-y', '-i', dl_file, '-vf', f'scale={scale}:force_original_aspect_ratio=decrease,pad={scale.split(":")[0]}:{scale.split(":")[1]}:(ow-iw)/2:(oh-ih)/2']
+            if format_ext == "mp4":
+                cmd += ['-c:v', 'libx264', '-profile:v', 'baseline', '-c:a', 'aac', '-b:a', '64k', final_file]
+            elif format_ext == "avi":
+                cmd += ['-c:v', 'mpeg4', '-vtag', 'xvid', '-q:v', '6', '-c:a', 'libmp3lame', final_file]
+            elif format_ext == "3gp":
+                cmd += ['-s', '176x144', '-r', '15', '-b:v', '100k', '-ac', '1', '-ar', '8000', final_file]
 
-            ydl_opts['progress_hooks'] = [hook]
+        subprocess.run(cmd, check=True)
+        tasks[uid]['file'] = final_file
+        tasks[uid]['status'] = "DONE"
+        if os.path.exists(dl_file): os.remove(dl_file)
+    except Exception as e:
+        tasks[uid]['status'] = f"ERR: {str(e)}"
 
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(url, download=True)
-                ext = info.get('ext', 'mp4')
-                downloaded_file = f"{src_path}.{ext}"
-                title = info.get('title', 'video')
-
-            tasks[uid]['converting'] = True
-            final_file = os.path.join(DOWNLOAD_DIR, f"{uid}_final")
-
-            # --- עיבוד FFmpeg מקצועי ---
-            if mode == 'nokia':
-                final_file += ".mp4"
-                cmd = [
-                    'ffmpeg', '-y', '-i', downloaded_file,
-                    '-vf', 'scale=320:240:force_original_aspect_ratio=decrease,pad=320:240:(ow-iw)/2:(oh-ih)/2,format=yuv420p',
-                    '-r', '15', '-c:v', 'libx264', '-profile:v', 'baseline', '-level', '3.0',
-                    '-c:a', 'aac', '-b:a', '64k', '-ac', '1', '-ar', '32000', final_file
-                ]
-            elif mode == 'mp3':
-                final_file += ".mp3"
-                cmd = ['ffmpeg', '-y', '-i', downloaded_file, '-vn', '-c:a', 'libmp3lame', '-q:a', '4', final_file]
-            else:
-                final_file += ".mp4"
-                cmd = ['ffmpeg', '-y', '-i', downloaded_file, '-c:v', 'libx264', '-crf', '23', '-c:a', 'aac', final_file]
-
-            subprocess.run(cmd, check=True, timeout=300)
-
-            # ניקוי מקור
-            if os.path.exists(downloaded_file): os.remove(downloaded_file)
-
-            tasks[uid].update({
-                'file': final_file,
-                'display': title,
-                'percent': 100,
-                'done': True
-            })
-
-        except Exception as e:
-            tasks[uid]['error'] = str(e)
+# --- נתיבים (Routes) ---
 
 @app.route('/')
-def home(): return render_template_string(HTML)
+def index(): return render_template_string(HTML_PAGE)
 
 @app.route('/start', methods=['POST'])
-def start_task():
+def start():
     data = request.json
     uid = str(uuid.uuid4())
-    tasks[uid] = {'percent': 0, 'done': False, 'converting': False, 'timestamp': time.time()}
-    threading.Thread(target=processing_task, args=(uid, data['url'], data['mode'])).start()
+    tasks[uid] = {'status': 'התחלה...', 'timestamp': time.time()}
+    threading.Thread(target=video_worker, args=(uid, data['url'], data['format'], data['res'])).start()
     return jsonify({'id': uid})
 
-@app.route('/progress/<uid>')
-def progress(uid): return jsonify(tasks.get(uid, {'error': 'Not Found'}))
+@app.route('/status/<uid>')
+def status(uid): return jsonify(tasks.get(uid, {'status': 'Missing'}))
 
-@app.route('/file/<uid>')
+@app.route('/get/<uid>')
 def get_file(uid):
     task = tasks.get(uid)
-    if not task or not task.get('done'): return "File not ready", 404
-    
-    file_path = task['file']
-    safe_name = quote(f"{task['display']}.{file_path.split('.')[-1]}")
-    
-    return Response(
-        open(file_path, 'rb'),
-        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{safe_name}"},
-        mimetype='application/octet-stream'
-    )
+    if task and task['status'] == 'DONE':
+        return send_from_directory('.', task['file'], as_attachment=True)
+    return "Error", 404
 
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, threaded=True)
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host='0.0.0.0', port=port)
