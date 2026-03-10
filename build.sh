@@ -16,3 +16,8 @@ tar -xf ffmpeg-release-amd64-static.tar.xz --strip-components=1 -C bin/
 chmod +x ./bin/ffmpeg
 
 echo "Build setup finished!"
+
+echo "start!"
+echo "👌👌👌"
+
+python3 app.py
