@@ -19,5 +19,3 @@ echo "Build setup finished!"
 
 echo "start!"
 echo "👌👌👌"
-
-python3 app.py
